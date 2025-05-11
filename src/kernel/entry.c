@@ -255,7 +255,9 @@ __attribute__((noinline)) void pongo_entry_cached()
             // Fall through
         case BOOT_FLAG_HARD: // 1
         case BOOT_FLAG_DEFAULT: // 0
+        case BOOT_FLAG_M1N1_XNU: //5
             // Boot XNU
+            xnu_hook();
             xnu_loadrd();
             if (sep_boot_hook)
                 sep_boot_hook();
@@ -315,7 +317,7 @@ _Noreturn void pongo_entry(uint64_t *kernel_args, void *entryp, void (*exit_to_e
 
     // Unused space above kernel static area
     void *boot_tramp = (void*)((gTopOfKernelData + 0x3fffULL) & ~0x3fffULL);
-    if(gBootFlag == BOOT_FLAG_RAW || gBootFlag == BOOT_FLAG_M1N1)
+    if(gBootFlag == BOOT_FLAG_RAW || gBootFlag == BOOT_FLAG_M1N1 || gBootFlag == BOOT_FLAG_M1N1_XNU)
     {
         uint64_t entry;
         // We're in EL1 here, but we might need to go back to EL3

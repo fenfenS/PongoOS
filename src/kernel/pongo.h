@@ -115,6 +115,7 @@ extern volatile char gBootFlag;
 #define BOOT_FLAG_HOOK 2
 #define BOOT_FLAG_M1N1 3
 #define BOOT_FLAG_RAW 4
+#define BOOT_FLAG_M1N1_XNU 5
 
 typedef uint64_t lock;
 extern void lock_take(lock* lock); // takes a lock spinning initially but after being pre-empted once it will start yielding until it acquires it

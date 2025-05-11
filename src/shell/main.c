@@ -67,6 +67,24 @@ void pongo_boot_m1n1() {
     task_yield();
 }
 
+void pongo_boot_m1n1_xnu() {
+    if (!loader_xfer_recv_count) {
+        iprintf("please upload a raw m1n1.bin before issuing this command\n");
+        return;
+    }
+
+    char *fwversion = dt_get_prop("/chosen", "firmware-version", NULL);
+    strlcpy(fwversion, gFWVersion, 256);
+
+    void *m1n1 = alloc_static(loader_xfer_recv_count);
+    memmove(m1n1, loader_xfer_recv_data, loader_xfer_recv_count);
+    loader_xfer_recv_count = 0;
+    gM1N1Base = vatophys_static(m1n1);
+
+    gBootFlag = BOOT_FLAG_M1N1_XNU;
+    task_yield();
+}
+
 void* ramdisk_buf;
 uint32_t ramdisk_size;
 
@@ -292,6 +310,7 @@ void shell_main() {
     command_register("ramdisk", "loads a ramdisk for xnu", ramdisk_cmd);
     command_register("bootr", "boot raw image", pongo_boot_raw);
     command_register("bootm", "boots m1n1", pongo_boot_m1n1);
+    command_register("bootmx", "boots m1n1 for xnu tracing", pongo_boot_m1n1_xnu);
     command_register("spin", "spins 1 second", pongo_spin);
     command_register("md8", "memory dump", md8_cmd);
     command_register("peek", "32bit mem read", peek_cmd);
