@@ -29,7 +29,7 @@
 .global _jump_to_image_extended
 .global _jump_to_image
 _jump_to_image_extended:
-    mov x8, x3
+    mov x18, x3
 _jump_to_image:
     mov x30, x0
     mov x0, x1
