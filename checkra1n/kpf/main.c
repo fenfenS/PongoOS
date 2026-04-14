@@ -292,6 +292,31 @@ void kpf_mac_mount_patch(xnu_pf_patchset_t* xnu_text_exec_patchset) {
     matches[0] = 0x1283ffc9; // movz w/x9, 0x1ffe/-0x1fff
     masks[0] = 0x3fffffff;
     xnu_pf_maskmatch(xnu_text_exec_patchset, "mac_mount_patch2", matches, masks, sizeof(matches)/sizeof(uint64_t), false, (void*)kpf_mac_mount_callback);
+
+    // Observed on tvOS 26.4 in a different helper sequence:
+    // ldrb w8, [x26, #0x54]
+    // tbz  w8, #0,  ...
+    // ldr  x8, [x26, #0xd8]
+    // ldrb w8, [x8, #0x71]
+    // tbz  w8, #6,  ...
+    // orr  w8, w21, #0x10000
+    uint64_t matches_tv26x[] = {
+        0x39415348, // ldrb w8, [x26, #0x54]
+        0x36000008, // tbz w8, #0, ...
+        0xf9406f48, // ldr x8, [x26, #0xd8]
+        0x3941c508, // ldrb w8, [x8, #0x71]
+        0x36300008, // tbz w8, #6, ...
+        0x321002a8, // orr w8, w21, #0x10000
+    };
+    uint64_t masks_tv26x[] = {
+        0xffffffff,
+        0xfff8001f,
+        0xffffffff,
+        0xffffffff,
+        0xfff8001f,
+        0xffffffff,
+    };
+    xnu_pf_maskmatch(xnu_text_exec_patchset, "mac_mount_patch3", matches_tv26x, masks_tv26x, sizeof(matches_tv26x)/sizeof(uint64_t), false, (void*)kpf_mac_mount_callback);
 }
 
 bool dounmount_found;
@@ -477,6 +502,11 @@ static bool kpf_vm_map_protect_branch_short(struct xnu_pf_patch *patch, uint32_t
     return kpf_vm_map_protect_branch(opcode_stream + 1);
 }
 
+static bool kpf_vm_map_protect_branch_tv26x(struct xnu_pf_patch *patch, uint32_t *opcode_stream)
+{
+    return kpf_vm_map_protect_branch(opcode_stream + 6);
+}
+
 static bool kpf_vm_map_protect_inline(struct xnu_pf_patch *patch, uint32_t *opcode_stream)
 {
     DEVLOG("vm_map_protect candidate at 0x%llx", xnu_ptr_to_va(opcode_stream));
@@ -542,7 +572,7 @@ static bool kpf_vm_map_protect_inline(struct xnu_pf_patch *patch, uint32_t *opco
 static void kpf_vm_map_protect_patch(xnu_pf_patchset_t* xnu_text_exec_patchset)
 {
     // We do two things at once here: allow protecting to rwx, and ignore map->map_disallow_new_exec.
-    // There's a total of 4 patters we look for. On iOS 13.3.x and older:
+    // There's a total of 5 patters we look for. On iOS 13.3.x and older:
     //
     // 0xfffffff0071a10cc      c9061f12       and w9, w22, 6
     // 0xfffffff0071a10d0      3f190071       cmp w9, 6
@@ -568,6 +598,16 @@ static void kpf_vm_map_protect_patch(xnu_pf_patchset_t* xnu_text_exec_patchset)
     // 0xfffffff0072c5f84      5f01376a       bics wzr, w10, w23
     // 0xfffffff0072c5f88      61010054       b.ne 0xfffffff0072c5fb4
     // 0xfffffff0072c5f8c      4801b837       tbnz w8, 0x17, 0xfffffff0072c5fb4
+    //
+    // Or this, as observed on tvOS 26.4:
+    //
+    // 0xfffffff0072f7758      360840f9       ldr x22, [x1, #0x10]
+    // 0xfffffff0072f775c      c9008052       mov w9, #0x6
+    // 0xfffffff0072f7760      2901340a       bic w9, w9, w20
+    // 0xfffffff0072f7764      08010a12       and w8, w8, #0x400000
+    // 0xfffffff0072f7768      3f010071       cmp w9, #0
+    // 0xfffffff0072f776c      0009407a       ccmp w8, #0, #0, eq
+    // 0xfffffff0072f7770      81010054       b.ne 0xfffffff0072f77a0
     //
     // And then there's a weird carveout from iOS 15.2 to 15.7.x that has stuff inlined in variations of:
     //
@@ -634,6 +674,26 @@ static void kpf_vm_map_protect_patch(xnu_pf_patchset_t* xnu_text_exec_patchset)
         0xffe00010,
     };
     xnu_pf_maskmatch(xnu_text_exec_patchset, "vm_map_protect", matches17, masks17, sizeof(matches17)/sizeof(uint64_t), false, (void*)kpf_vm_map_protect_branch_short);
+
+    uint64_t matches_tv26x[] = {
+        0xf9400800, // ldr x?, [x?, #0x10]
+        0x528000c0, // mov w?, #0x6
+        0x0a200000, // bic w?, w?, w?
+        0x120a0000, // and w?, w?, #0x400000
+        0x7100001f, // cmp w?, #0
+        0x7a400800, // ccmp w?, #0, #0, eq
+        0x54000001, // b.ne 0x...
+    };
+    uint64_t masks_tv26x[] = {
+        0xfffffc00,
+        0xffffffe0,
+        0xffe0fc00,
+        0xfffffc00,
+        0xfffffc1f,
+        0xfffffe1f,
+        0xff00001f,
+    };
+    xnu_pf_maskmatch(xnu_text_exec_patchset, "vm_map_protect", matches_tv26x, masks_tv26x, sizeof(matches_tv26x)/sizeof(uint64_t), false, (void*)kpf_vm_map_protect_branch_tv26x);
 
     uint64_t matches_inline[] = {
         0x2a3003e0, // mvn w{0-15}, w{16-31}
